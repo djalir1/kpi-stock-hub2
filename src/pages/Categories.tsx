@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useCategories } from '@/hooks/useCategories';
 import { useStockItems } from '@/hooks/useStockItems';
+import { useAuth } from '@/contexts/AuthContext'; // 1. Added useAuth import
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,24 +20,31 @@ const colorPresets = [
 export default function Categories() {
   const { categories, isLoading, addCategory, updateCategory, deleteCategory } = useCategories();
   const { items } = useStockItems();
+  const { role } = useAuth(); // 2. Get the role from AuthContext
+  
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [newCategory, setNewCategory] = useState({ name: '', description: '', color: '#3B82F6' });
   const [editData, setEditData] = useState({ name: '', description: '', color: '#3B82F6' });
 
+  // Safety check: Prevents supervisor from triggering mutation even if they find a way to click
+  const isKeeper = role === 'storekeeper';
+
   const handleAddCategory = () => {
-    if (!newCategory.name) return;
+    if (!newCategory.name || !isKeeper) return;
     addCategory.mutate(newCategory);
     setNewCategory({ name: '', description: '', color: '#3B82F6' });
     setIsAddOpen(false);
   };
 
   const handleEditCategory = (id: string) => {
+    if (!isKeeper) return;
     updateCategory.mutate({ id, ...editData });
     setEditingCategory(null);
   };
 
   const handleDeleteCategory = (id: string) => {
+    if (!isKeeper) return;
     if (confirm('Are you sure you want to delete this category?')) {
       deleteCategory.mutate(id);
     }
@@ -58,48 +66,52 @@ export default function Categories() {
           <h1 className="text-3xl font-bold">Categories</h1>
           <p className="text-muted-foreground">Organize your stock items</p>
         </div>
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2"><Plus className="w-4 h-4" /> Add Category</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Add New Category</DialogTitle></DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <Input 
-                  value={newCategory.name} 
-                  onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })} 
-                  placeholder="Category name" 
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea 
-                  value={newCategory.description} 
-                  onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })} 
-                  placeholder="Optional description" 
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Color</Label>
-                <div className="flex flex-wrap gap-2">
-                  {colorPresets.map((color) => (
-                    <button
-                      key={color}
-                      className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${newCategory.color === color ? 'border-foreground scale-110' : 'border-transparent'}`}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setNewCategory({ ...newCategory, color })}
-                    />
-                  ))}
+
+        {/* 3. Wrap "Add Category" in a role check */}
+        {isKeeper && (
+          <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2"><Plus className="w-4 h-4" /> Add Category</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Add New Category</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input 
+                    value={newCategory.name} 
+                    onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })} 
+                    placeholder="Category name" 
+                  />
                 </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea 
+                    value={newCategory.description} 
+                    onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })} 
+                    placeholder="Optional description" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Color</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {colorPresets.map((color) => (
+                      <button
+                        key={color}
+                        className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${newCategory.color === color ? 'border-foreground scale-110' : 'border-transparent'}`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => setNewCategory({ ...newCategory, color })}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <Button onClick={handleAddCategory} className="w-full" disabled={!newCategory.name}>
+                  Add Category
+                </Button>
               </div>
-              <Button onClick={handleAddCategory} className="w-full" disabled={!newCategory.name}>
-                Add Category
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {isLoading ? (
@@ -135,14 +147,18 @@ export default function Categories() {
                         </CardDescription>
                       </div>
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button size="icon" variant="ghost" onClick={() => openEditDialog(category)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeleteCategory(category.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+
+                    {/* 4. Wrap Edit/Delete buttons in role check */}
+                    {isKeeper && (
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button size="icon" variant="ghost" onClick={() => openEditDialog(category)}>
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDeleteCategory(category.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -166,7 +182,7 @@ export default function Categories() {
         </div>
       )}
 
-      {/* Edit Dialog */}
+      {/* Edit Dialog - Only renders if keeper is editing */}
       <Dialog open={!!editingCategory} onOpenChange={() => setEditingCategory(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Category</DialogTitle></DialogHeader>
