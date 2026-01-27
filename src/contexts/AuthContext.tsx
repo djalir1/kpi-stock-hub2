@@ -29,57 +29,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUserData = async (userId: string) => {
     try {
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', userId)
         .maybeSingle();
 
-      setProfile(profileData ?? null);
+      if (profileError) {
+        console.error('Profile fetch error:', profileError);
+      } else {
+        setProfile(profileData ?? null);
+      }
 
-      const { data: roleData } = await supabase
+      const { data: roleData, error: roleError } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', userId)
         .maybeSingle();
 
-      setRole((roleData?.role as AppRole) ?? null);
+      if (roleError) {
+        console.error('Role fetch error:', roleError);
+        setRole(null);
+      } else {
+        setRole((roleData?.role as AppRole) ?? null);
+      }
     } catch (err) {
-      console.error('User data fetch error:', err);
+      console.error('Unexpected user data error:', err);
       setProfile(null);
       setRole(null);
     }
   };
 
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
 
-      // LOGIN / INITIAL LOAD
-      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
+        // LOGIN / INITIAL LOAD
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          setSession(currentSession);
+          setUser(currentSession?.user ?? null);
 
-        if (currentSession?.user) {
-          await fetchUserData(currentSession.user.id);
+          if (currentSession?.user) {
+            await fetchUserData(currentSession.user.id);
+          }
+
+          setLoading(false);
+          return;
         }
 
-        setLoading(false);
-        return;
-      }
+        // LOGOUT (verify before clearing state)
+        if (event === 'SIGNED_OUT') {
+          const { data } = await supabase.auth.getSession();
 
-      // LOGOUT — trust Supabase, no session re-check
-      if (event === 'SIGNED_OUT') {
-        setSession(null);
-        setUser(null);
-        setProfile(null);
-        setRole(null);
-        setLoading(false);
+          if (!data.session) {
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+            setRole(null);
+            setLoading(false);
+          }
+        }
       }
-    });
+    );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -87,10 +102,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
+    const redirectUrl = `${window.location.origin}/`;
     return await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo: redirectUrl,
         data: { full_name: fullName },
       },
     });
@@ -98,8 +115,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
-
-    // fallback clear (safe)
     setSession(null);
     setUser(null);
     setProfile(null);
