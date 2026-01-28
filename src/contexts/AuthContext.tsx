@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import type { AppRole, Profile } from '@/lib/types';
@@ -10,11 +10,7 @@ interface AuthContextType {
   role: AppRole | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (
-    email: string,
-    password: string,
-    fullName: string
-  ) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -27,34 +23,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // 🔥 THIS is the key fix
+  const manualLogout = useRef(false);
+
   const fetchUserData = async (userId: string) => {
     try {
-      const { data: profileData, error: profileError } = await supabase
+      const { data: profileData } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (profileError) {
-        console.error('Profile fetch error:', profileError);
-      } else {
-        setProfile(profileData ?? null);
-      }
+      setProfile(profileData ?? null);
 
-      const { data: roleData, error: roleError } = await supabase
+      const { data: roleData } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (roleError) {
-        console.error('Role fetch error:', roleError);
-        setRole(null);
-      } else {
-        setRole((roleData?.role as AppRole) ?? null);
-      }
+      setRole((roleData?.role as AppRole) ?? null);
     } catch (err) {
-      console.error('Unexpected user data error:', err);
+      console.error('User data error:', err);
       setProfile(null);
       setRole(null);
     }
@@ -64,8 +54,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
 
-        // LOGIN / INITIAL LOAD
+        // INITIAL LOAD / LOGIN
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          manualLogout.current = false;
+
           setSession(currentSession);
           setUser(currentSession?.user ?? null);
 
@@ -77,17 +69,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // LOGOUT (verify before clearing state)
+        // LOGOUT — ONLY if user clicked logout
         if (event === 'SIGNED_OUT') {
-          const { data } = await supabase.auth.getSession();
-
-          if (!data.session) {
-            setSession(null);
-            setUser(null);
-            setProfile(null);
-            setRole(null);
+          if (!manualLogout.current) {
+            // ignore refresh / token rehydrate
             setLoading(false);
+            return;
           }
+
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setRole(null);
+          setLoading(false);
         }
       }
     );
@@ -102,23 +96,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const redirectUrl = `${window.location.origin}/`;
     return await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: redirectUrl,
         data: { full_name: fullName },
       },
     });
   };
 
+  // ✅ LOGOUT THAT ACTUALLY WORKS
   const signOut = async () => {
+    manualLogout.current = true;
     await supabase.auth.signOut();
-    setSession(null);
-    setUser(null);
-    setProfile(null);
-    setRole(null);
   };
 
   return (
