@@ -10,20 +10,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Package, Minus, Trash2, ShieldCheck, RefreshCcw } from 'lucide-react';
+import { Plus, Search, Minus, Trash2, ShieldCheck, RefreshCcw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function Stock() {
   const { items, isLoading, addItem, issueItem, returnItem, deleteItem } = useStockItems();
   const { categories } = useCategories();
   const { role } = useAuth();
-  
-  const isKeeper = role === 'storekeeper';
 
+  const isKeeper = role === 'storekeeper';
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isAddOpen, setIsAddOpen] = useState(false);
-  
+
   const [newItem, setNewItem] = useState({
     name: '',
     category_id: '',
@@ -138,7 +137,9 @@ export default function Stock() {
                   <Label>Initial Quantity</Label>
                   <Input type="number" value={newItem.quantity} onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })} />
                 </div>
-                <Button onClick={handleAddItem} className="w-full" disabled={!newItem.name || !newItem.quantity}>Save Item</Button>
+                <Button onClick={handleAddItem} className="w-full" disabled={!newItem.name || !newItem.quantity}>
+                  Save Item
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -166,14 +167,18 @@ export default function Stock() {
 
         <CardContent>
           {isLoading ? (
-            <div className="flex justify-center py-12"><RefreshCcw className="w-8 h-8 animate-spin text-primary" /></div>
+            <div className="flex justify-center py-12">
+              <RefreshCcw className="w-8 h-8 animate-spin text-primary" />
+            </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead className="text-center">Quantity</TableHead>
+                  <TableHead className="text-center">Total Added</TableHead>
+                  <TableHead className="text-center">Remaining</TableHead>
+                  <TableHead className="text-center">Issued</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Updated</TableHead>
                   {isKeeper && <TableHead className="text-right">Actions</TableHead>}
@@ -185,25 +190,41 @@ export default function Stock() {
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>
                       {item.category ? (
-                        <Badge variant="outline" style={{ borderColor: item.category.color }}>{item.category.name}</Badge>
+                        <Badge variant="outline" style={{ borderColor: item.category.color }}>
+                          {item.category.name}
+                        </Badge>
                       ) : '-'}
                     </TableCell>
+                    <TableCell className="text-center font-mono">{item.total_added ?? 0}</TableCell>
                     <TableCell className="text-center font-mono">{item.quantity}</TableCell>
+                    <TableCell className="text-center font-mono text-rose-600 font-medium">
+                      {item.issued ?? 0}
+                    </TableCell>
                     <TableCell>{getStatusBadge(item.status)}</TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {formatDistanceToNow(new Date(item.updated_at), { addSuffix: true })}
                     </TableCell>
-                    
+
                     {isKeeper && (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
-                          <Button size="icon" variant="ghost" onClick={() => openIssueDialog(item.id)} disabled={item.quantity <= 0}>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => openIssueDialog(item.id)}
+                            disabled={item.quantity <= 0}
+                          >
                             <Minus className="w-4 h-4" />
                           </Button>
                           <Button size="icon" variant="ghost" onClick={() => openRestockDialog(item.id)}>
                             <Plus className="w-4 h-4" />
                           </Button>
-                          <Button size="icon" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => confirm('Delete?') && deleteItem.mutate(item.id)}>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-destructive hover:bg-destructive/10"
+                            onClick={() => confirm('Delete?') && deleteItem.mutate(item.id)}
+                          >
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
@@ -224,7 +245,12 @@ export default function Stock() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Quantity to Remove</Label>
-              <Input type="number" placeholder="0" value={issueQuantity} onChange={(e) => setIssueQuantity(e.target.value)} />
+              <Input
+                type="number"
+                placeholder="0"
+                value={issueQuantity}
+                onChange={(e) => setIssueQuantity(e.target.value)}
+              />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsIssueDialogOpen(false)}>Cancel</Button>
@@ -241,11 +267,18 @@ export default function Stock() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Quantity to Add</Label>
-              <Input type="number" placeholder="0" value={restockQuantity} onChange={(e) => setRestockQuantity(e.target.value)} />
+              <Input
+                type="number"
+                placeholder="0"
+                value={restockQuantity}
+                onChange={(e) => setRestockQuantity(e.target.value)}
+              />
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsRestockDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleRestockConfirm} className="bg-green-600 hover:bg-green-700">Add to Stock</Button>
+              <Button onClick={handleRestockConfirm} className="bg-green-600 hover:bg-green-700">
+                Add to Stock
+              </Button>
             </DialogFooter>
           </div>
         </DialogContent>
