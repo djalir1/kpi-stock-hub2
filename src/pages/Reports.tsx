@@ -93,11 +93,12 @@ export default function Reports() {
         csvContent += `${date},${time},"${itemName}",${m.movement_type},${m.quantity},${m.previous_quantity},${m.new_quantity},"${m.notes || ''}"\n`;
       });
     } else {
-      csvContent = 'Name,Category,Quantity,Status,Date Added,Last Updated\n';
+      // Updated CSV headers + columns for the three quantity fields
+      csvContent = 'Name,Category,Total Added,Remaining,Issued,Status,Date Added,Last Updated\n';
       (reportData as typeof filteredItems).forEach((item) => {
         const dateAdded = format(new Date(item.created_at), 'yyyy-MM-dd HH:mm');
         const lastUpdated = format(new Date(item.updated_at), 'yyyy-MM-dd HH:mm');
-        csvContent += `"${item.name}","${item.category?.name || 'Uncategorized'}",${item.quantity},${item.status},${dateAdded},${lastUpdated}\n`;
+        csvContent += `"${item.name}","${item.category?.name || 'Uncategorized'}",${item.total_added ?? 0},${item.quantity},${item.issued ?? 0},${item.status},${dateAdded},${lastUpdated}\n`;
       });
     }
 
@@ -154,10 +155,13 @@ export default function Reports() {
         }
       });
     } else {
+      // Updated PDF table headers + data for Total Added / Remaining / Issued
       const tableData = (reportData as typeof filteredItems).map((item) => [
         item.name,
         item.category?.name || 'Uncategorized',
+        (item.total_added ?? 0).toString(),
         item.quantity.toString(),
+        (item.issued ?? 0).toString(),
         item.status.replace('_', ' ').toUpperCase(),
         format(new Date(item.created_at), 'MMM dd, yyyy'),
         format(new Date(item.updated_at), 'MMM dd, yyyy')
@@ -165,7 +169,7 @@ export default function Reports() {
 
       autoTable(doc, {
         startY: 50,
-        head: [['Name', 'Category', 'Qty', 'Status', 'Added', 'Updated']],
+        head: [['Name', 'Category', 'Total Added', 'Remaining', 'Issued', 'Status', 'Added', 'Updated']],
         body: tableData,
         theme: 'striped',
         headStyles: { fillColor: [59, 130, 246], textColor: 255 },
@@ -395,7 +399,9 @@ export default function Reports() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead className="text-center">Qty</TableHead>
+                  <TableHead className="text-center">Total Added</TableHead>
+                  <TableHead className="text-center">Remaining</TableHead>
+                  <TableHead className="text-center">Issued</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Date Added</TableHead>
                   <TableHead>Last Updated</TableHead>
@@ -414,7 +420,11 @@ export default function Reports() {
                         '-'
                       )}
                     </TableCell>
+                    <TableCell className="text-center font-mono">{item.total_added ?? 0}</TableCell>
                     <TableCell className="text-center font-mono">{item.quantity}</TableCell>
+                    <TableCell className="text-center font-mono text-rose-600">
+                      {item.issued ?? 0}
+                    </TableCell>
                     <TableCell>{getStatusBadge(item.status)}</TableCell>
                     <TableCell className="text-sm">{format(new Date(item.created_at), 'MMM dd, yyyy HH:mm')}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{format(new Date(item.updated_at), 'MMM dd, yyyy HH:mm')}</TableCell>
