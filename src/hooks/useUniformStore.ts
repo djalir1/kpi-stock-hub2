@@ -75,6 +75,26 @@ export const useUniformStore = () => {
   });
 
   // --- 2. MUTATIONS ---
+  const addUniformMutation = useMutation({
+    mutationFn: async (u: any) => {
+      const { error } = await supabase.from('uniform_items').insert([{
+        name: u.name,
+        category: u.category, // always the category NAME from the dropdown
+        total_quantity: u.totalQuantity,
+        remaining_quantity: u.totalQuantity
+      }]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['uniform-items'] });
+      queryClient.invalidateQueries({ queryKey: ['uniform-issuances'] });
+      toast({ title: "Success", description: "Uniform item added." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not add uniform item.", variant: "destructive" });
+    }
+  });
+
   const updateUniformMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string, updates: Partial<UniformItem> }) => {
       const dbUpdates: any = {};
@@ -85,7 +105,11 @@ export const useUniformStore = () => {
       const { error } = await supabase.from('uniform_items').update(dbUpdates).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['uniform-items'] })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['uniform-items'] });
+      // Also refresh issuances so report categories reflect any category rename
+      queryClient.invalidateQueries({ queryKey: ['uniform-issuances'] });
+    }
   });
 
   const updateIssuedRecordMutation = useMutation({
@@ -115,14 +139,85 @@ export const useUniformStore = () => {
     }
   });
 
+  const addCategoryMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const { error } = await supabase.from('uniform_categories').insert([{ name }]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      // Refresh categories so dropdown immediately shows the new category
+      queryClient.invalidateQueries({ queryKey: ['uniform-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['uniform-items'] });
+      queryClient.invalidateQueries({ queryKey: ['uniform-issuances'] });
+      toast({ title: "Success", description: "Category added." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not add category.", variant: "destructive" });
+    }
+  });
+
+  const deleteCategoryMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('uniform_categories').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['uniform-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['uniform-items'] });
+      queryClient.invalidateQueries({ queryKey: ['uniform-issuances'] });
+      toast({ title: "Success", description: "Category deleted." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not delete category.", variant: "destructive" });
+    }
+  });
+
+  const deleteUniformMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('uniform_items').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['uniform-items'] });
+      queryClient.invalidateQueries({ queryKey: ['uniform-issuances'] });
+      toast({ title: "Success", description: "Uniform item deleted." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Could not delete uniform item.", variant: "destructive" });
+    }
+  });
+
+  const issueUniformMutation = useMutation({
+    mutationFn: async ({ name, id, qty, date }: { name: string, id: string, qty: number, date: string }) => {
+      const { error } = await supabase.from('uniform_issuances').insert([{
+        student_name: name,
+        uniform_id: id,
+        quantity_taken: qty,
+        issue_date: date
+      }]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['uniform-items'] });
+      queryClient.invalidateQueries({ queryKey: ['uniform-issuances'] });
+      queryClient.invalidateQueries({ queryKey: ['uniform-movements'] });
+    }
+  });
+
   return {
-    categories, uniforms, issuedUniforms, movements, isLoading, isLoadingMovements,
-    onAddUniform: (u: any) => supabase.from('uniform_items').insert([{ name: u.name, category: u.category, total_quantity: u.totalQuantity, remaining_quantity: u.totalQuantity }]).then(() => queryClient.invalidateQueries({ queryKey: ['uniform-items'] })),
+    categories,
+    uniforms,
+    issuedUniforms,
+    movements,
+    isLoading,
+    isLoadingMovements,
+    onAddUniform: (u: any) => addUniformMutation.mutateAsync(u),
     onUpdateUniform: (id: string, updates: any) => updateUniformMutation.mutate({ id, updates }),
-    onDeleteUniform: (id: string) => supabase.from('uniform_items').delete().eq('id', id).then(() => queryClient.invalidateQueries({ queryKey: ['uniform-items'] })),
-    onAddCategory: (name: string) => supabase.from('uniform_categories').insert([{ name }]).then(() => queryClient.invalidateQueries({ queryKey: ['uniform-categories'] })),
-    onDeleteCategory: (id: string) => supabase.from('uniform_categories').delete().eq('id', id).then(() => queryClient.invalidateQueries({ queryKey: ['uniform-categories'] })),
-    issueUniform: (name: string, id: string, qty: number, date: string) => supabase.from('uniform_issuances').insert([{ student_name: name, uniform_id: id, quantity_taken: qty, issue_date: date }]).then(() => { queryClient.invalidateQueries({ queryKey: ['uniform-items'] }); queryClient.invalidateQueries({ queryKey: ['uniform-issuances'] }); }),
+    onDeleteUniform: (id: string) => deleteUniformMutation.mutate(id),
+    onAddCategory: (name: string) => addCategoryMutation.mutate(name),
+    onDeleteCategory: (id: string) => deleteCategoryMutation.mutate(id),
+    issueUniform: (name: string, id: string, qty: number, date: string) =>
+      issueUniformMutation.mutateAsync({ name, id, qty, date }),
     onUpdateIssuedRecord: (id: string, updates: any) => updateIssuedRecordMutation.mutate({ id, updates }),
     onDeleteIssuedRecord: (id: string) => deleteIssuedMutation.mutate(id),
   };
