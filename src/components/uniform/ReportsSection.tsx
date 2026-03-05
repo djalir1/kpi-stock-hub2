@@ -62,7 +62,6 @@ export const ReportsSection = ({ records }: ReportsSectionProps) => {
     });
   };
 
-  // Group records by uniformCategory, preserving insertion order of first appearance
   const groupByCategory = (recs: IssuedUniform[]): Record<string, IssuedUniform[]> => {
     return recs.reduce((groups, record) => {
       const cat = record.uniformCategory;
@@ -89,8 +88,7 @@ export const ReportsSection = ({ records }: ReportsSectionProps) => {
     doc.setTextColor(100);
     doc.text(
       `Date Range: ${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}`,
-      14,
-      32,
+      14, 32,
     );
     doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 38);
     doc.text(`Total Records: ${filteredRecords.length}`, 14, 44);
@@ -138,7 +136,7 @@ export const ReportsSection = ({ records }: ReportsSectionProps) => {
 
       doc.setFontSize(9);
       doc.setTextColor(60, 60, 60);
-      doc.text(`Subtotal for ${category}: ${categoryTotal} uniform(s) issued`, 14, currentY);
+      doc.text(`Subtotal for ${category}: ${categoryTotal} issued`, 14, currentY);
       currentY += 10;
     });
 
@@ -146,7 +144,7 @@ export const ReportsSection = ({ records }: ReportsSectionProps) => {
     const totalQuantity = filteredRecords.reduce((sum, r) => sum + r.quantityTaken, 0);
     doc.setFontSize(11);
     doc.setTextColor(0);
-    doc.text(`Grand Total Uniforms Issued: ${totalQuantity}`, 14, currentY);
+    doc.text(`Grand Total Issued: ${totalQuantity}`, 14, currentY);
 
     doc.save(`uniform-report-${startDate}-to-${endDate}.pdf`);
     toast.success('PDF report downloaded successfully');
@@ -263,7 +261,7 @@ export const ReportsSection = ({ records }: ReportsSectionProps) => {
                   <div className="px-4 py-2 bg-secondary text-sm text-right border-t border-border">
                     <span className="text-muted-foreground">Subtotal: </span>
                     <span className="font-bold text-primary">
-                      {categoryRecords.reduce((sum, r) => sum + r.quantityTaken, 0)} uniform(s)
+                      {categoryRecords.reduce((sum, r) => sum + r.quantityTaken, 0)} issued
                     </span>
                   </div>
                 </div>
@@ -271,7 +269,7 @@ export const ReportsSection = ({ records }: ReportsSectionProps) => {
 
               {/* Grand total */}
               <div className="p-3 bg-secondary rounded-lg flex justify-between items-center">
-                <span className="font-medium">Grand Total Uniforms Issued</span>
+                <span className="font-medium">Grand Total Issued</span>
                 <span className="text-primary font-bold text-lg">
                   {filteredRecords.reduce((sum, r) => sum + r.quantityTaken, 0)}
                 </span>
