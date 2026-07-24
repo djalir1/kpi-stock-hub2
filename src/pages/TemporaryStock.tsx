@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FEATURES } from '@/config/features';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTemporaryLoans, TempStockItem, TempStockLoan } from '@/hooks/useTemporaryLoans';
 import { Button } from '@/components/ui/button';
@@ -20,7 +21,33 @@ import { format, formatDistanceToNow, isWithinInterval, startOfDay, endOfDay } f
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-export default function TemporaryStock() {
+function ComingSoon() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[70vh] text-center px-4 animate-fade-in">
+      <div className="relative mb-6">
+        <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center">
+          <Timer className="w-12 h-12 text-primary" />
+        </div>
+        <span className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-amber-400 flex items-center justify-center shadow-md">
+          <span className="text-white text-xs font-bold">!</span>
+        </span>
+      </div>
+      <Badge className="mb-4 bg-amber-100 text-amber-700 border border-amber-300 text-sm px-4 py-1">
+        Paid Feature — Coming Soon
+      </Badge>
+      <h2 className="text-2xl font-bold mb-2">Temporary Stock</h2>
+      <p className="text-muted-foreground max-w-md text-base leading-relaxed">
+        This feature allows staff to lend items to teachers and track returns.
+        It's being prepared and will be available once activated.
+      </p>
+      <p className="mt-6 text-sm text-muted-foreground/60 italic">
+        Contact your system administrator to enable this module.
+      </p>
+    </div>
+  );
+}
+
+function TemporaryStockContent() {
   const { role } = useAuth();
   const isKeeper = role === 'storekeeper';
   const today = new Date().toISOString().slice(0, 10);
@@ -664,4 +691,8 @@ export default function TemporaryStock() {
       </AlertDialog>
     </div>
   );
+}
+
+export default function TemporaryStock() {
+  return FEATURES.temporaryStock ? <TemporaryStockContent /> : <ComingSoon />;
 }

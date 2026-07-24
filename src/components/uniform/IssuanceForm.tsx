@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { ClipboardList, AlertCircle, Loader2, ShieldAlert, Hash } from 'lucide-react';
+import { ClipboardList, AlertCircle, Loader2, ShieldAlert, Hash, Lock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { FEATURES } from '@/config/features';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -62,7 +64,7 @@ export const IssuanceForm = ({ uniforms, onIssue }: IssuanceFormProps) => {
       return;
     }
 
-    if (isSweaterCategory && !sweaterNumber.trim()) {
+    if (FEATURES.sweaterNumbers && isSweaterCategory && !sweaterNumber.trim()) {
       toast({ title: 'Missing Sweater Number', description: 'Please enter the sweater number.', variant: 'destructive' });
       return;
     }
@@ -75,7 +77,7 @@ export const IssuanceForm = ({ uniforms, onIssue }: IssuanceFormProps) => {
 
     setIsSubmitting(true);
     try {
-      await onIssue(studentName.trim(), selectedUniformId, qty, date, isSweaterCategory ? sweaterNumber.trim() : undefined);
+      await onIssue(studentName.trim(), selectedUniformId, qty, date, (FEATURES.sweaterNumbers && isSweaterCategory) ? sweaterNumber.trim() : undefined);
       setStudentName('');
       setSelectedUniformId('');
       setQuantity('');
@@ -165,20 +167,33 @@ export const IssuanceForm = ({ uniforms, onIssue }: IssuanceFormProps) => {
             </div>
 
             {isSweaterCategory && (
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="sweaterNumber" className="flex items-center gap-1.5">
-                  <Hash className="w-3.5 h-3.5 text-primary" />
-                  Sweater Number <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="sweaterNumber"
-                  value={sweaterNumber}
-                  onChange={(e) => setSweaterNumber(e.target.value)}
-                  placeholder="e.g. 231"
-                  className="font-mono"
-                />
-                <p className="text-xs text-muted-foreground">Each sweater has a unique number — this links the sweater to the student.</p>
-              </div>
+              FEATURES.sweaterNumbers ? (
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="sweaterNumber" className="flex items-center gap-1.5">
+                    <Hash className="w-3.5 h-3.5 text-primary" />
+                    Sweater Number <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="sweaterNumber"
+                    value={sweaterNumber}
+                    onChange={(e) => setSweaterNumber(e.target.value)}
+                    placeholder="e.g. 231"
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">Each sweater has a unique number — this links the sweater to the student.</p>
+                </div>
+              ) : (
+                <div className="md:col-span-2 flex items-center gap-3 p-3 rounded-lg border border-dashed border-amber-300 bg-amber-50/60">
+                  <Lock className="w-4 h-4 text-amber-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-sm font-medium text-amber-800">Sweater Number Tracking</span>
+                      <Badge className="bg-amber-100 text-amber-700 border border-amber-300 text-[10px] px-2 py-0">Coming Soon</Badge>
+                    </div>
+                    <p className="text-xs text-amber-600/80">Unique sweater numbers will be assigned here once this feature is activated.</p>
+                  </div>
+                </div>
+              )
             )}
           </div>
         </fieldset>
