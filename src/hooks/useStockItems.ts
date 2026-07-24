@@ -37,32 +37,34 @@ export function useStockItems() {
     };
   }, [queryClient]);
 
-  const { data: items = [], isLoading, error } = useQuery({
+  const { data: items = [], isLoading, error } = useQuery<StockItemWithCategory[]>({
     queryKey: ['stock-items'],
-    queryFn: async (): Promise<StockItemWithCategory[]> => {
+    queryFn: async () => {
       const { data: stockItems, error: itemsError } = await supabase
         .from('stock_items')
-        .select('*')
+        .select(`
+          id, name, category_id, quantity, min_quantity, status, person_responsible, notes,
+          created_by, created_at, updated_at, total_added, issued
+        `)
         .order('created_at', { ascending: false });
 
       if (itemsError) throw itemsError;
 
-      // Fetch categories
       const categoryIds = [...new Set(stockItems.filter(i => i.category_id).map(i => i.category_id))];
       let categoryMap: Record<string, Category> = {};
-      
+
       if (categoryIds.length > 0) {
-        const { data: categories } = await supabase
+        const { data: categories, error: catError } = await supabase
           .from('categories')
           .select('*')
           .in('id', categoryIds as string[]);
-        
-        if (categories) {
-          categoryMap = categories.reduce((acc, c) => {
-            acc[c.id] = c as Category;
-            return acc;
-          }, {} as Record<string, Category>);
-        }
+
+        if (catError) throw catError;
+
+        categoryMap = categories.reduce((acc, c) => {
+          acc[c.id] = c as Category;
+          return acc;
+        }, {} as Record<string, Category>);
       }
 
       return stockItems.map(item => ({
@@ -73,27 +75,40 @@ export function useStockItems() {
     },
   });
 
-  const logActivity = async (action: string, entityType: string, entityId: string, details?: Record<string, unknown>) => {
-    if (user?.id) {
-      await supabase.from('activity_logs').insert([{
-        user_id: user.id,
-        action,
-        entity_type: entityType,
-        entity_id: entityId,
-        details: details ? JSON.parse(JSON.stringify(details)) : null,
-      }]);
-    }
+  const logActivity = async (
+    action: string,
+    entityType: string,
+    entityId: string,
+    details?: Record<string, unknown>
+  ) => {
+    if (!user?.id) return;
+    await supabase.from('activity_logs').insert({
+      user_id: user.id,
+      action,
+      entity_type: entityType,
+      entity_id: entityId,
+      details: details ? JSON.parse(JSON.stringify(details)) : null,
+    });
   };
 
   const addItem = useMutation({
-    mutationFn: async (item: { name: string; category_id?: string | null; quantity: number; min_quantity: number; person_responsible?: string | null; notes?: string | null }) => {
+    mutationFn: async (item: {
+      name: string;
+      category_id?: string | null;
+      quantity: number;
+      min_quantity?: number;
+      person_responsible?: string | null;
+      notes?: string | null;
+    }) => {
       const { data, error } = await supabase
         .from('stock_items')
         .insert({
           name: item.name,
           category_id: item.category_id || null,
           quantity: item.quantity,
-          min_quantity: item.min_quantity,
+          total_added: item.quantity,
+          issued: 0,
+          min_quantity: item.min_quantity ?? 5,
           person_responsible: item.person_responsible || null,
           notes: item.notes || null,
           created_by: user?.id || null,
@@ -103,7 +118,6 @@ export function useStockItems() {
 
       if (error) throw error;
 
-      // Log movement
       await supabase.from('stock_movements').insert({
         item_id: data.id,
         movement_type: 'added',
@@ -114,35 +128,147 @@ export function useStockItems() {
         performed_by: user?.id || null,
       });
 
-      await logActivity('created', 'stock_item', data.id, { name: item.name, quantity: item.quantity });
+      await logActivity('created', 'stock_item', data.id, {
+        name: item.name,
+        quantity: item.quantity,
+      });
 
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock-items'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      toast({
-        title: 'Item added',
-        description: 'Stock item has been added successfully.',
-      });
+      toast({ title: 'Success', description: 'Item added to stock.' });
     },
     onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
+      toast({ title: 'Error', description: error.message || 'Failed to add item.', variant: 'destructive' });
+    },
+  });
+
+  const issueItem = useMutation({
+    mutationFn: async ({ id, quantity, notes, recipient }: { id: string; quantity: number; notes?: string; recipient?: string }) => {
+      const { data: current, error: fetchError } = await supabase
+        .from('stock_items')
+        .select('quantity, issued, total_added')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!current) throw new Error('Item not found');
+
+      const newQuantity = current.quantity - quantity;
+      if (newQuantity < 0) throw new Error('Not enough stock');
+
+      const newIssued = (current.issued || 0) + quantity;
+
+      const { error: updateError } = await supabase
+        .from('stock_items')
+        .update({
+          quantity: newQuantity,
+          issued: newIssued,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      await supabase.from('stock_movements').insert({
+        item_id: id,
+        movement_type: 'issued',
+        quantity: -quantity,
+        previous_quantity: current.quantity,
+        new_quantity: newQuantity,
+        notes: recipient ? `Issued to: ${recipient}` : (notes || null),
+        performed_by: user?.id || null,
       });
+
+      await logActivity('issued', 'stock_item', id, { quantity, recipient });
+
+      return { quantity: newQuantity, issued: newIssued };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
+      toast({ title: 'Success', description: 'Item issued successfully.' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error', description: error.message || 'Failed to issue item.', variant: 'destructive' });
+    },
+  });
+
+  const returnItem = useMutation({
+    mutationFn: async ({ id, quantity, notes }: { id: string; quantity: number; notes?: string }) => {
+      const { data: current, error: fetchError } = await supabase
+        .from('stock_items')
+        .select('quantity, issued, total_added')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!current) throw new Error('Item not found');
+
+      const newQuantity = current.quantity + quantity;
+      // ────────────────────────────────────────────────
+      // IMPORTANT CHANGE: issued is NOT decreased anymore
+      // It stays exactly the same value as before
+      const newIssued = current.issued || 0;
+
+      const newTotalAdded = (current.total_added || 0) + quantity;
+
+      const { error: updateError } = await supabase
+        .from('stock_items')
+        .update({
+          quantity: newQuantity,
+          issued: newIssued,           // ← no change here
+          total_added: newTotalAdded,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      await supabase.from('stock_movements').insert({
+        item_id: id,
+        movement_type: 'returned',
+        quantity: quantity,
+        previous_quantity: current.quantity,
+        new_quantity: newQuantity,
+        notes: notes || null,
+        performed_by: user?.id || null,
+      });
+
+      await logActivity('returned', 'stock_item', id, { quantity, notes });
+
+      return { quantity: newQuantity, issued: newIssued, total_added: newTotalAdded };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
+      toast({ title: 'Success', description: 'Item returned / restocked successfully.' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error', description: error.message || 'Failed to restock item.', variant: 'destructive' });
     },
   });
 
   const updateItem = useMutation({
-    mutationFn: async ({ id, name, category_id, quantity, min_quantity, person_responsible, notes }: { 
-      id: string; 
-      name?: string; 
-      category_id?: string | null; 
-      quantity?: number; 
-      min_quantity?: number; 
-      person_responsible?: string | null; 
+    mutationFn: async ({
+      id,
+      name,
+      category_id,
+      quantity,
+      min_quantity,
+      person_responsible,
+      notes,
+    }: {
+      id: string;
+      name?: string;
+      category_id?: string | null;
+      quantity?: number;
+      min_quantity?: number;
+      person_responsible?: string | null;
       notes?: string | null;
     }) => {
       const updates: Record<string, unknown> = {};
@@ -169,152 +295,26 @@ export function useStockItems() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock-items'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      toast({
-        title: 'Item updated',
-        description: 'Stock item has been updated successfully.',
-      });
+      toast({ title: 'Success', description: 'Item updated successfully.' });
     },
     onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: error.message || 'Failed to update item.', variant: 'destructive' });
     },
   });
 
   const deleteItem = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('stock_items')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('stock_items').delete().eq('id', id);
       if (error) throw error;
-
       await logActivity('deleted', 'stock_item', id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock-items'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      toast({
-        title: 'Item deleted',
-        description: 'Stock item has been deleted successfully.',
-      });
+      toast({ title: 'Success', description: 'Item deleted successfully.' });
     },
     onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const issueItem = useMutation({
-    mutationFn: async ({ id, quantity, notes }: { id: string; quantity: number; notes?: string }) => {
-      const { data: currentItem, error: fetchError } = await supabase
-        .from('stock_items')
-        .select('quantity')
-        .eq('id', id)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      const newQuantity = currentItem.quantity - quantity;
-      if (newQuantity < 0) throw new Error('Insufficient stock');
-
-      const { data, error } = await supabase
-        .from('stock_items')
-        .update({ quantity: newQuantity })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      await supabase.from('stock_movements').insert({
-        item_id: id,
-        movement_type: 'issued',
-        quantity: -quantity,
-        previous_quantity: currentItem.quantity,
-        new_quantity: newQuantity,
-        notes: notes || null,
-        performed_by: user?.id || null,
-      });
-
-      await logActivity('issued', 'stock_item', id, { quantity, notes });
-
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
-      toast({
-        title: 'Item issued',
-        description: 'Stock has been issued successfully.',
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const returnItem = useMutation({
-    mutationFn: async ({ id, quantity, notes }: { id: string; quantity: number; notes?: string }) => {
-      const { data: currentItem, error: fetchError } = await supabase
-        .from('stock_items')
-        .select('quantity')
-        .eq('id', id)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      const newQuantity = currentItem.quantity + quantity;
-
-      const { data, error } = await supabase
-        .from('stock_items')
-        .update({ quantity: newQuantity })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      await supabase.from('stock_movements').insert({
-        item_id: id,
-        movement_type: 'returned',
-        quantity: quantity,
-        previous_quantity: currentItem.quantity,
-        new_quantity: newQuantity,
-        notes: notes || null,
-        performed_by: user?.id || null,
-      });
-
-      await logActivity('returned', 'stock_item', id, { quantity, notes });
-
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stock-items'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-movements'] });
-      toast({
-        title: 'Item returned',
-        description: 'Stock has been returned successfully.',
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: error.message || 'Failed to delete item.', variant: 'destructive' });
     },
   });
 

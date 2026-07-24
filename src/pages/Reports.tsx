@@ -30,6 +30,9 @@ export default function Reports() {
   const { data: movements = [] } = useStockMovements();
   const { categories } = useCategories();
   
+  const getRecipient = (notes: string | null) =>
+    notes?.startsWith('Issued to: ') ? notes.split('\n')[0].replace('Issued to: ', '') : null;
+
   const [reportType, setReportType] = useState<string>('full');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -85,19 +88,20 @@ export default function Reports() {
     let csvContent = '';
     
     if (isMovementReport) {
-      csvContent = 'Date,Time,Item,Type,Quantity,Previous Qty,New Qty,Notes\n';
+      csvContent = 'Date,Time,Item,Type,Quantity,Previous Qty,New Qty,Notes,Issued To\n';
       filteredMovements.forEach((m) => {
         const date = format(new Date(m.created_at), 'yyyy-MM-dd');
         const time = format(new Date(m.created_at), 'HH:mm:ss');
         const itemName = m.item_name || 'Unknown';
-        csvContent += `${date},${time},"${itemName}",${m.movement_type},${m.quantity},${m.previous_quantity},${m.new_quantity},"${m.notes || ''}"\n`;
+        csvContent += `${date},${time},"${itemName}",${m.movement_type},${m.quantity},${m.previous_quantity},${m.new_quantity},"${m.notes?.startsWith('Issued to: ') ? '' : (m.notes || '')}","${getRecipient(m.notes) || ''}"\n`;
       });
     } else {
-      csvContent = 'Name,Category,Quantity,Status,Date Added,Last Updated\n';
+      // Updated CSV headers + columns for the three quantity fields
+      csvContent = 'Name,Category,Total Added,Remaining,Issued,Status,Date Added,Last Updated\n';
       (reportData as typeof filteredItems).forEach((item) => {
         const dateAdded = format(new Date(item.created_at), 'yyyy-MM-dd HH:mm');
         const lastUpdated = format(new Date(item.updated_at), 'yyyy-MM-dd HH:mm');
-        csvContent += `"${item.name}","${item.category?.name || 'Uncategorized'}",${item.quantity},${item.status},${dateAdded},${lastUpdated}\n`;
+        csvContent += `"${item.name}","${item.category?.name || 'Uncategorized'}",${item.total_added ?? 0},${item.quantity},${item.issued ?? 0},${item.status},${dateAdded},${lastUpdated}\n`;
       });
     }
 
@@ -105,89 +109,131 @@ export default function Reports() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `kpi-stock-report-${reportType}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.download = `cunga-stock-report-${reportType}-${format(new Date(), 'yyyy-MM-dd')}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     const doc = new jsPDF();
+    const now = new Date();
+    const generatedAt = format(now, 'dd MMM yyyy, HH:mm:ss');
     const reportTitle = reportTypes.find(r => r.value === reportType)?.label || 'Stock Report';
-    
-    doc.setFontSize(20);
-    doc.setTextColor(40, 40, 40);
-    doc.text('KPI Stock Management', 14, 22);
-    
-    doc.setFontSize(14);
-    doc.setTextColor(80, 80, 80);
-    doc.text(reportTitle, 14, 32);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(120, 120, 120);
-    if (dateRange?.from && dateRange?.to) {
-      doc.text(`Date Range: ${format(dateRange.from, 'LLL dd, y')} - ${format(dateRange.to, 'LLL dd, y')}`, 14, 40);
-    } else {
-      doc.text(`Generated: ${format(new Date(), 'LLL dd, yyyy HH:mm')}`, 14, 40);
+    const pageWidth = doc.internal.pageSize.width;
+    const pageHeight = doc.internal.pageSize.height;
+    const navy: [number, number, number] = [30, 58, 138];
+    const accentRow: [number, number, number] = [241, 245, 255];
+
+    // Load logo
+    let logoBase64: string | null = null;
+    try {
+      const res = await fetch('/cunga-logo-nobg.png');
+      const blob = await res.blob();
+      logoBase64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    } catch { /* logo unavailable */ }
+
+    // Header block
+    if (logoBase64) {
+      doc.addImage(logoBase64, 'PNG', 14, 8, 32, 16);
     }
+    doc.setFontSize(22);
+    doc.setTextColor(...navy);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Cunga Stock', pageWidth - 14, 16, { align: 'right' });
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text('Stock Management System', pageWidth - 14, 22, { align: 'right' });
+
+    // Separator
+    doc.setDrawColor(...navy);
+    doc.setLineWidth(0.6);
+    doc.line(14, 27, pageWidth - 14, 27);
+
+    // Report title + meta
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 30, 30);
+    doc.text(reportTitle, 14, 37);
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    let metaY = 44;
+    if (dateRange?.from && dateRange?.to) {
+      doc.text(`Period: ${format(dateRange.from, 'dd MMM yyyy')} – ${format(dateRange.to, 'dd MMM yyyy')}`, 14, metaY);
+      metaY += 6;
+    }
+    doc.text(`Generated: ${generatedAt}`, 14, metaY);
+
+    const startY = metaY + 10;
 
     if (isMovementReport) {
       const tableData = filteredMovements.map((m) => [
-        format(new Date(m.created_at), 'MMM dd, yyyy'),
-        format(new Date(m.created_at), 'HH:mm'),
+        format(new Date(m.created_at), 'dd MMM yyyy'),
+        format(new Date(m.created_at), 'HH:mm:ss'),
         m.item_name || 'Unknown',
         m.movement_type.charAt(0).toUpperCase() + m.movement_type.slice(1),
         m.quantity.toString(),
         m.previous_quantity.toString(),
         m.new_quantity.toString(),
-        m.notes || '-'
+        m.notes?.startsWith('Issued to: ') ? '' : (m.notes || '–'),
+        getRecipient(m.notes) || '–',
       ]);
 
       autoTable(doc, {
-        startY: 50,
-        head: [['Date', 'Time', 'Item', 'Type', 'Qty', 'Prev', 'New', 'Notes']],
+        startY,
+        head: [['Date', 'Time', 'Item', 'Type', 'Qty', 'Prev', 'New', 'Notes', 'Issued To']],
         body: tableData,
-        theme: 'striped',
-        headStyles: { fillColor: [59, 130, 246], textColor: 255 },
-        styles: { fontSize: 8, cellPadding: 3 },
-        columnStyles: {
-          7: { cellWidth: 40 }
-        }
+        theme: 'grid',
+        headStyles: { fillColor: navy, textColor: 255, fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: accentRow },
+        styles: { fontSize: 7.5, cellPadding: 3 },
+        columnStyles: { 7: { cellWidth: 32 }, 8: { cellWidth: 28 } },
       });
     } else {
       const tableData = (reportData as typeof filteredItems).map((item) => [
         item.name,
         item.category?.name || 'Uncategorized',
+        (item.total_added ?? 0).toString(),
         item.quantity.toString(),
-        item.status.replace('_', ' ').toUpperCase(),
-        format(new Date(item.created_at), 'MMM dd, yyyy'),
-        format(new Date(item.updated_at), 'MMM dd, yyyy')
+        (item.issued ?? 0).toString(),
+        item.status.replace(/_/g, ' ').toUpperCase(),
+        format(new Date(item.created_at), 'dd MMM yyyy HH:mm'),
+        format(new Date(item.updated_at), 'dd MMM yyyy HH:mm'),
       ]);
 
       autoTable(doc, {
-        startY: 50,
-        head: [['Name', 'Category', 'Qty', 'Status', 'Added', 'Updated']],
+        startY,
+        head: [['Name', 'Category', 'Total Added', 'Remaining', 'Issued', 'Status', 'Date Added', 'Last Updated']],
         body: tableData,
-        theme: 'striped',
-        headStyles: { fillColor: [59, 130, 246], textColor: 255 },
-        styles: { fontSize: 8, cellPadding: 3 },
+        theme: 'grid',
+        headStyles: { fillColor: navy, textColor: 255, fontStyle: 'bold', fontSize: 8 },
+        alternateRowStyles: { fillColor: accentRow },
+        styles: { fontSize: 7.5, cellPadding: 3 },
       });
     }
 
-    // Footer with page numbers
+    // Footer
     const pageCount = doc.getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
       doc.setFontSize(8);
       doc.setTextColor(150, 150, 150);
+      doc.text('Cunga Stock Management System', 14, pageHeight - 10);
       doc.text(
-        `Page ${i} of ${pageCount} • Generated ${format(new Date(), 'MMM dd, yyyy HH:mm')}`,
-        doc.internal.pageSize.width / 2,
-        doc.internal.pageSize.height - 10,
-        { align: 'center' }
+        `Page ${i} of ${pageCount}  •  ${generatedAt}`,
+        pageWidth - 14,
+        pageHeight - 10,
+        { align: 'right' },
       );
     }
 
-    doc.save(`kpi-stock-report-${reportType}-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
+    doc.save(`cunga-stock-report-${reportType}-${format(now, 'yyyy-MM-dd')}.pdf`);
   };
 
   const getStatusBadge = (status: string) => {
@@ -372,6 +418,7 @@ export default function Reports() {
                   <TableHead className="text-center">Prev</TableHead>
                   <TableHead className="text-center">New</TableHead>
                   <TableHead>Notes</TableHead>
+                  <TableHead>Issued To</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -384,7 +431,10 @@ export default function Reports() {
                     <TableCell className="text-center font-mono">{movement.quantity}</TableCell>
                     <TableCell className="text-center font-mono text-muted-foreground">{movement.previous_quantity}</TableCell>
                     <TableCell className="text-center font-mono">{movement.new_quantity}</TableCell>
-                    <TableCell className="text-muted-foreground max-w-[200px] truncate">{movement.notes || '-'}</TableCell>
+                    <TableCell className="text-muted-foreground max-w-[200px] truncate">
+                      {movement.notes?.startsWith('Issued to: ') ? '—' : (movement.notes || '—')}
+                    </TableCell>
+                    <TableCell className="font-medium">{getRecipient(movement.notes) || '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -395,7 +445,9 @@ export default function Reports() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead className="text-center">Qty</TableHead>
+                  <TableHead className="text-center">Total Added</TableHead>
+                  <TableHead className="text-center">Remaining</TableHead>
+                  <TableHead className="text-center">Issued</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Date Added</TableHead>
                   <TableHead>Last Updated</TableHead>
@@ -414,7 +466,11 @@ export default function Reports() {
                         '-'
                       )}
                     </TableCell>
+                    <TableCell className="text-center font-mono">{item.total_added ?? 0}</TableCell>
                     <TableCell className="text-center font-mono">{item.quantity}</TableCell>
+                    <TableCell className="text-center font-mono text-rose-600">
+                      {item.issued ?? 0}
+                    </TableCell>
                     <TableCell>{getStatusBadge(item.status)}</TableCell>
                     <TableCell className="text-sm">{format(new Date(item.created_at), 'MMM dd, yyyy HH:mm')}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{format(new Date(item.updated_at), 'MMM dd, yyyy HH:mm')}</TableCell>

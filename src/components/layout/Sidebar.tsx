@@ -22,7 +22,8 @@ import {
   ChevronRight,
   Settings,
   Bell,
-  Shirt, // Added Shirt icon
+  Shirt,
+  Timer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +32,7 @@ const navItems = [
   { path: '/stock', label: 'Stock Items', icon: Package, badge: 'New' },
   { path: '/categories', label: 'Categories', icon: FolderOpen },
   { path: '/uniform', label: 'Uniform Inventory', icon: Shirt }, // Added Uniforms here
+  { path: '/temporary-stock', label: 'Temporary Stock', icon: Timer },
   { path: '/movements', label: 'History', icon: History },
   { path: '/reports', label: 'Reports', icon: FileText },
 ];
@@ -64,16 +66,18 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     >
       {/* Logo Section */}
       <div className={cn(
-        'flex items-center h-16 px-4 border-b border-sidebar-border',
-        collapsed ? 'justify-center' : 'gap-3'
+        'flex items-center h-16 px-3 border-b border-sidebar-border',
+        collapsed ? 'justify-center' : 'gap-2.5'
       )}>
-        <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow flex-shrink-0">
-          <Package className="w-5 h-5 text-primary-foreground" />
-        </div>
+        <img
+          src="/cunga-logo-nobg.png"
+          alt="Cunga Stock"
+          className="w-11 h-11 rounded-lg object-contain bg-white p-0.5 flex-shrink-0 shadow-md"
+        />
         {!collapsed && (
           <div className="animate-fade-in overflow-hidden">
-            <h1 className="font-bold text-lg leading-none text-sidebar-foreground">KPI Stock</h1>
-            <p className="text-xs text-sidebar-foreground/60">Management System</p>
+            <h1 className="font-bold text-base leading-tight text-sidebar-foreground">Cunga Stock</h1>
+            <p className="text-[11px] text-sidebar-foreground/55 leading-none mt-0.5">Management System</p>
           </div>
         )}
       </div>

@@ -16,6 +16,7 @@ import Settings from "./pages/Settings";
 import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 import Uniform from "./components/uniform";
+import TemporaryStock from "./pages/TemporaryStock";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +78,14 @@ function AppRoutes() {
         }
       />
 
+      <Route
+        path="/temporary-stock"
+        element={
+          <ProtectedRoute>
+            <TemporaryStock />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/movements"
         element={

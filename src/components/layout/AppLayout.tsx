@@ -21,7 +21,8 @@ import {
   Bell,
   Search as SearchIcon,
   X,
-  Shirt, // Added Shirt icon for Uniforms
+  Shirt,
+  Timer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sidebar } from './Sidebar';
@@ -31,7 +32,8 @@ const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/stock', label: 'Stock Items', icon: Package },
   { path: '/categories', label: 'Categories', icon: FolderOpen },
-  { path: '/uniforms', label: 'Uniform Inventory', icon: Shirt }, // New Uniform Menu Item
+  { path: '/uniform', label: 'Uniform Inventory', icon: Shirt },
+  { path: '/temporary-stock', label: 'Temporary Stock', icon: Timer },
   { path: '/movements', label: 'History', icon: History },
   { path: '/reports', label: 'Reports', icon: FileText },
 ];
@@ -126,11 +128,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   {/* Mobile sidebar content */}
                   <div className="flex flex-col h-full">
                     <div className="flex items-center gap-3 h-16 px-4 border-b border-sidebar-border">
-                      <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
-                        <Package className="w-5 h-5 text-primary-foreground" />
-                      </div>
+                      <img
+                        src="/cunga-logo-nobg.png"
+                        alt="Cunga Stock"
+                        className="w-11 h-11 rounded-lg object-contain bg-white p-0.5 flex-shrink-0 shadow-md"
+                      />
                       <div>
-                        <h1 className="font-bold text-lg leading-none text-sidebar-foreground">KPI Stock</h1>
+                        <h1 className="font-bold text-lg leading-none text-sidebar-foreground">Cunga Stock</h1>
                         <p className="text-xs text-sidebar-foreground/60">Management System</p>
                       </div>
                     </div>

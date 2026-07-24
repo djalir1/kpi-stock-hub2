@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Package, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -121,7 +121,7 @@ export default function Auth() {
     } else {
       toast({
         title: 'Account created!',
-        description: 'Welcome to KPI Stock Management.',
+        description: 'Welcome to Cunga Stock.',
       });
       navigate('/dashboard');
     }
@@ -136,10 +136,10 @@ export default function Auth() {
 
       <Card className="w-full max-w-md relative animate-scale-in">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto mb-4 w-16 h-16 rounded-2xl gradient-primary flex items-center justify-center shadow-glow">
-            <Package className="w-8 h-8 text-primary-foreground" />
+          <div className="mx-auto mb-4 w-24 h-24 rounded-2xl bg-white flex items-center justify-center shadow-glow overflow-hidden p-1">
+            <img src="/cunga-logo-nobg.png" alt="Cunga Stock" className="w-full h-full object-contain" />
           </div>
-          <CardTitle className="text-2xl font-bold">KPI Stock Management</CardTitle>
+          <CardTitle className="text-2xl font-bold">Cunga Stock</CardTitle>
           <CardDescription>School inventory management system</CardDescription>
         </CardHeader>
         <CardContent>

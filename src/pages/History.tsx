@@ -154,11 +154,23 @@ export default function History() {
                                 {movement.previous_quantity} → {movement.new_quantity}
                               </span>
                             </div>
-                            {movement.notes && (
+                            {movement.notes?.startsWith('Issued to: ') ? (
+                              <>
+                                <p className="text-sm bg-blue-500/10 text-blue-400 rounded-md px-3 py-2 mb-2 flex items-center gap-2">
+                                  <User className="w-3 h-3 shrink-0" />
+                                  Issued to: <span className="font-semibold text-foreground">{movement.notes.split('\n')[0].replace('Issued to: ', '')}</span>
+                                </p>
+                                {movement.notes.split('\n').slice(1).join('\n') && (
+                                  <p className="text-sm text-muted-foreground bg-muted/50 rounded-md px-3 py-2 mb-2">
+                                    {movement.notes.split('\n').slice(1).join('\n')}
+                                  </p>
+                                )}
+                              </>
+                            ) : movement.notes ? (
                               <p className="text-sm text-muted-foreground bg-muted/50 rounded-md px-3 py-2 mb-2">
                                 {movement.notes}
                               </p>
-                            )}
+                            ) : null}
                             <div className="flex items-center gap-4 text-xs text-muted-foreground">
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />

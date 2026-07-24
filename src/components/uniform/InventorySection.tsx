@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Edit2, Trash2, Package, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,11 +40,11 @@ import { UniformItem, UniformCategory } from '@/types/uniform';
 interface InventorySectionProps {
   uniforms: UniformItem[];
   categories: UniformCategory[];
-  onAddUniform: (uniform: Omit<UniformItem, 'id' | 'remainingQuantity'>) => void;
-  onUpdateUniform: (id: string, updates: Partial<UniformItem>) => void;
-  onDeleteUniform: (id: string) => void;
-  onAddCategory: (name: string) => void;
-  onDeleteCategory: (id: string) => void;
+  onAddUniform?: (uniform: Omit<UniformItem, 'id' | 'remainingQuantity'>) => void;
+  onUpdateUniform?: (id: string, updates: Partial<UniformItem>) => void;
+  onDeleteUniform?: (id: string) => void;
+  onAddCategory?: (name: string) => void;
+  onDeleteCategory?: (id: string) => void;
 }
 
 export const InventorySection = ({
@@ -56,14 +56,15 @@ export const InventorySection = ({
   onAddCategory,
   onDeleteCategory,
 }: InventorySectionProps) => {
+  // If these functions aren't passed by the parent, the user is a Supervisor (Read Only)
+  const isReadOnly = !onAddUniform && !onDeleteUniform;
+
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [isRestockOpen, setIsRestockOpen] = useState(false);
   
-  // State for Delete Confirmation
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
-  
   const [editingUniform, setEditingUniform] = useState<UniformItem | null>(null);
   const [restockItem, setRestockItem] = useState<UniformItem | null>(null);
   const [restockAmount, setRestockAmount] = useState('0');
@@ -76,7 +77,7 @@ export const InventorySection = ({
   });
 
   const handleAdd = () => {
-    if (formData.name && formData.category && formData.totalQuantity) {
+    if (onAddUniform && formData.name && formData.category && formData.totalQuantity) {
       onAddUniform({
         name: formData.name,
         category: formData.category,
@@ -88,7 +89,7 @@ export const InventorySection = ({
   };
 
   const handleEdit = () => {
-    if (editingUniform && formData.name && formData.category) {
+    if (onUpdateUniform && editingUniform && formData.name && formData.category) {
       onUpdateUniform(editingUniform.id, {
         name: formData.name,
         category: formData.category,
@@ -101,7 +102,7 @@ export const InventorySection = ({
 
   const handleRestock = () => {
     const amount = parseInt(restockAmount);
-    if (restockItem && amount > 0) {
+    if (onUpdateUniform && restockItem && amount > 0) {
       onUpdateUniform(restockItem.id, {
         totalQuantity: restockItem.totalQuantity + amount,
         remainingQuantity: restockItem.remainingQuantity + amount
@@ -136,17 +137,27 @@ export const InventorySection = ({
           <div className="p-2 bg-primary/10 rounded-lg">
             <Package className="h-5 w-5 text-primary" />
           </div>
-          <h2 className="text-xl font-semibold">Uniform Inventory</h2>
+          <div>
+            <h2 className="text-xl font-semibold">Uniform Inventory</h2>
+            {isReadOnly && (
+              <span className="text-xs text-blue-600 flex items-center gap-1 font-medium">
+                <ShieldCheck className="h-3 w-3" /> View Only Mode
+              </span>
+            )}
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setIsCategoryOpen(true)}>
-            Categories
-          </Button>
-          <Button size="sm" onClick={() => setIsAddOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add New Item
-          </Button>
-        </div>
+        
+        {!isReadOnly && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setIsCategoryOpen(true)}>
+              Categories
+            </Button>
+            <Button size="sm" onClick={() => setIsAddOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add New Item
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="rounded-md border">
@@ -158,7 +169,7 @@ export const InventorySection = ({
               <TableHead className="text-center">Total Stock</TableHead>
               <TableHead className="text-center">Remaining</TableHead>
               <TableHead className="text-center">Issued</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              {!isReadOnly && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -177,180 +188,183 @@ export const InventorySection = ({
                 <TableCell className="text-center font-mono text-muted-foreground">
                   {uniform.totalQuantity - uniform.remainingQuantity}
                 </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                      onClick={() => { setRestockItem(uniform); setIsRestockOpen(true); }}
-                      title="Restock Item"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(uniform)}>
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setItemToDelete(uniform.id)}
-                      className="text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
+                
+                {!isReadOnly && (
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                        onClick={() => { setRestockItem(uniform); setIsRestockOpen(true); }}
+                        title="Restock Item"
+                      >
+                        <RefreshCw className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(uniform)}>
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setItemToDelete(uniform.id)}
+                        className="text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
 
-      {/* CONFIRM DELETE DIALOG */}
-      <AlertDialog open={!!itemToDelete} onOpenChange={() => setItemToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete this uniform from the inventory. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              className="bg-destructive text-white hover:bg-destructive/90"
-              onClick={() => {
-                if (itemToDelete) onDeleteUniform(itemToDelete);
-                setItemToDelete(null);
-              }}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       {/* RESTOCK DIALOG */}
-      <Dialog open={isRestockOpen} onOpenChange={setIsRestockOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5" /> Restock: {restockItem?.name}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="grid grid-cols-2 gap-4 text-sm bg-muted p-3 rounded-md">
-              <div>Current Total: <strong>{restockItem?.totalQuantity}</strong></div>
-              <div>On Shelf: <strong>{restockItem?.remainingQuantity}</strong></div>
+      {!isReadOnly && (
+        <Dialog open={isRestockOpen} onOpenChange={setIsRestockOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5" /> Restock: {restockItem?.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="space-y-2">
+                <Label>Quantity to Add</Label>
+                <Input
+                  type="number"
+                  value={restockAmount}
+                  onChange={(e) => setRestockAmount(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>How many new items are you adding?</Label>
-              <Input
-                type="number"
-                min="1"
-                placeholder="e.g. 50"
-                value={restockAmount}
-                onChange={(e) => setRestockAmount(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsRestockOpen(false)}>Cancel</Button>
-            <Button onClick={handleRestock} className="bg-green-600 hover:bg-green-700 text-white">
-              Complete Restock
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsRestockOpen(false)}>Cancel</Button>
+              <Button onClick={handleRestock}>Complete Restock</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
-      {/* CATEGORY DIALOG - FIXED */}
-      <Dialog open={isCategoryOpen} onOpenChange={setIsCategoryOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Manage Categories</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="flex gap-2">
-              <Input 
-                placeholder="New category name..." 
-                value={newCategoryName} 
-                onChange={(e) => setNewCategoryName(e.target.value)}
-              />
-              <Button onClick={() => {
-                if (newCategoryName.trim()) {
-                  onAddCategory(newCategoryName.trim());
-                  setNewCategoryName('');
-                }
-              }}>Add</Button>
+      {/* CATEGORY DIALOG */}
+      {!isReadOnly && (
+        <Dialog open={isCategoryOpen} onOpenChange={setIsCategoryOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Manage Categories</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="flex gap-2">
+                <Input 
+                  placeholder="New category name..." 
+                  value={newCategoryName} 
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                />
+                <Button onClick={() => {
+                  if (onAddCategory && newCategoryName.trim()) {
+                    onAddCategory(newCategoryName.trim());
+                    setNewCategoryName('');
+                  }
+                }}>Add</Button>
+              </div>
+              <div className="max-h-[300px] overflow-y-auto space-y-2">
+                {categories.map((cat) => (
+                  <div key={cat.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                    <span className="text-sm font-medium">{cat.name}</span>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 text-destructive"
+                      onClick={() => onDeleteCategory?.(cat.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="max-h-[300px] overflow-y-auto space-y-2">
-              {categories.map((cat) => (
-                <div key={cat.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
-                  <span className="text-sm font-medium">{cat.name}</span>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="h-8 w-8 text-destructive"
-                    onClick={() => onDeleteCategory(cat.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* ADD ITEM DIALOG */}
-      <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Add New Uniform</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+      {!isReadOnly && (
+        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Add New Uniform</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})}>
+                  <SelectTrigger><SelectValue placeholder="Select Category" /></SelectTrigger>
+                  <SelectContent>
+                    {categories.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Total Quantity</Label>
+                <Input type="number" value={formData.totalQuantity} onChange={(e) => setFormData({...formData, totalQuantity: e.target.value})} />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})}>
-                <SelectTrigger><SelectValue placeholder="Select Category" /></SelectTrigger>
-                <SelectContent>
-                  {categories.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Initial Total Quantity</Label>
-              <Input type="number" value={formData.totalQuantity} onChange={(e) => setFormData({...formData, totalQuantity: e.target.value})} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={handleAdd} className="w-full">Save Uniform</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button onClick={handleAdd} className="w-full">Save Item</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* EDIT DIALOG */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Edit Uniform</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2"><Label>Name</Label><Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} /></div>
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{categories.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
+      {!isReadOnly && (
+        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Edit Uniform</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {categories.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={handleEdit} className="w-full">Update Details</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button onClick={handleEdit} className="w-full">Update Item</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* DELETE ALERT */}
+      {!isReadOnly && (
+        <AlertDialog open={!!itemToDelete} onOpenChange={() => setItemToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => {
+                if (onDeleteUniform && itemToDelete) onDeleteUniform(itemToDelete);
+                setItemToDelete(null);
+              }}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 };

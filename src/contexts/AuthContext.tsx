@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import type { AppRole, Profile } from '@/lib/types';
@@ -23,6 +23,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // 🔥 THIS is the key fix
+  const manualLogout = useRef(false);
+
   const fetchUserData = async (userId: string) => {
     try {
       const { data: profileData } = await supabase
@@ -31,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (profileData) setProfile(profileData as Profile);
+      setProfile(profileData ?? null);
 
       const { data: roleData } = await supabase
         .from('user_roles')
@@ -39,94 +42,87 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', userId)
         .maybeSingle();
 
-      if (roleData) setRole(roleData.role as AppRole);
-    } catch (error) {
-      console.error('Error fetching user data:', error);
+      setRole((roleData?.role as AppRole) ?? null);
+    } catch (err) {
+      console.error('User data error:', err);
+      setProfile(null);
+      setRole(null);
     }
   };
 
   useEffect(() => {
-    let mounted = true;
-
-    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
-        if (!mounted) return;
 
-        console.log('Auth state change:', event);
+        // INITIAL LOAD / LOGIN
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          manualLogout.current = false;
 
+          setSession(currentSession);
+          setUser(currentSession?.user ?? null);
+
+          if (currentSession?.user) {
+            await fetchUserData(currentSession.user.id);
+          }
+
+          setLoading(false);
+          return;
+        }
+
+        // LOGOUT — ONLY if user clicked logout
         if (event === 'SIGNED_OUT') {
+          if (!manualLogout.current) {
+            // ignore refresh / token rehydrate
+            setLoading(false);
+            return;
+          }
+
           setSession(null);
           setUser(null);
           setProfile(null);
           setRole(null);
           setLoading(false);
-          return;
         }
-
-        // For all other events, update session if we have one
-        if (currentSession) {
-          setSession(currentSession);
-          setUser(currentSession.user);
-          
-          // Only fetch user data on initial sign in or if profile not loaded
-          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-            // Use setTimeout to avoid Supabase client deadlock
-            setTimeout(() => {
-              if (mounted && currentSession.user) {
-                fetchUserData(currentSession.user.id);
-              }
-            }, 0);
-          }
-        }
-        
-        setLoading(false);
       }
     );
 
-    // Then get the initial session
-    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
-      if (!mounted) return;
-      
-      if (initialSession) {
-        setSession(initialSession);
-        setUser(initialSession.user);
-        fetchUserData(initialSession.user.id).finally(() => {
-          if (mounted) setLoading(false);
-        });
-      } else {
-        setLoading(false);
-      }
-    });
-
     return () => {
-      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+    return await supabase.auth.signInWithPassword({ email, password });
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    const { error } = await supabase.auth.signUp({
+    return await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: redirectUrl, data: { full_name: fullName } },
+      options: {
+        data: { full_name: fullName },
+      },
     });
-    return { error };
   };
 
+  // ✅ LOGOUT THAT ACTUALLY WORKS
   const signOut = async () => {
+    manualLogout.current = true;
     await supabase.auth.signOut();
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, session, profile, role, loading, signIn, signUp, signOut }}
+      value={{
+        user,
+        session,
+        profile,
+        role,
+        loading,
+        signIn,
+        signUp,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>
@@ -135,6 +131,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
   return context;
 }
